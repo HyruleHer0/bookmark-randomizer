@@ -1,4 +1,28 @@
 header {
     display: flex;
-    align-items: flex-end;
+    justify-content: space-between;
+}
+
+header button.hide {
+    display: none;
+}
+
+.bookmark-folder {
+    border: 1px solid black;
+    border-radius: 4px;
+    background-color: lightblue;
+    margin: 2px 1px;
+    padding: 2px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.bookmark-folder:hover {
+    background-color:royalblue;
+}
+
+.bookmark-folder.ghosted {
+    background-color: gray;
+    font-weight: unset;
+    cursor: not-allowed;
 }
