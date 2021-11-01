@@ -1,32 +1,61 @@
 /// <reference path="chrome.d.ts" />
 
 
-var rootNode;
-var parentId;
+/** Key for chrome's local storage */
+const setsStorageKey = "saved-sets";
+/** Dictionary of set name to array bookmark folder ids */
+var allSets;
+/** Id of the parent folder for the nodes currently being viewed */
+let parentId;
 
 // Elements
-const bookmarkDiv = document.getElementById('bookmarks');
+const setsList = document.querySelector('#sets-area ul');
+const bookmarkTable = document.querySelector('#bookmarks > table');
 const headerElem = document.querySelector('header');
 const upBtn = document.getElementById('up-btn');
 
 assignHandlers();
 
-chrome.bookmarks.getTree(function (allNodes) {
-    rootNode = allNodes[0];
-    setActiveNode(rootNode);
-});
+// let demoSetsTable = {
+//     'demo': ['5', '62', '661']
+// }
+// chrome.storage.sync.set({[setsStorageKey]: demoSetsTable});
 
-function setActiveNode(node) {
+
+
+chrome.bookmarks.getTree(result => {
+    console.log(result);
+})
+
+
+
+chrome.storage.sync.get(setsStorageKey, buildSetsTable);
+
+function buildSetsTable(storageRsp) {
+    allSets = storageRsp[setsStorageKey] || {};
+    const createNewElem = setsList.querySelector('.create-new-set');
+
+    // Populate the list
+    Object.keys(allSets).forEach(key => {
+        const li = document.createElement('li');
+        li.textContent = key;
+        li.classList.add('bm-set');
+        setsList.insertBefore(li, createNewElem);
+    });
+}
+
+
+function setActiveBMNode(node) {
     if (!!node.children & !!node.children.length) {
         parentId = node.parentId;
-        bookmarkDiv.textContent = '';
+        bookmarkTable.textContent = '';
 
         // chrome.storage.sync.set({'last-fetched': node.id});
 
         node.children.forEach(child => {
             if (!child.hasOwnProperty('url')) { // Check that it's a folder
                 const div = buildHTMLForFolder(child);
-                bookmarkDiv.append(div);
+                bookmarkTable.append(div);
             }
         });
     }
@@ -38,7 +67,7 @@ function setActiveNode(node) {
 function setActiveNodebyId(id) {
     chrome.bookmarks.getSubTree(id, result => {
         if (!!result && result.length) {
-            setActiveNode(result[0]);
+            setActiveBMNode(result[0]);
         }
     });
 }
@@ -83,17 +112,43 @@ function isEndOfPath(node) {
     });
 }
 
+function clickSet(e) {
+    const set = e.target.closest('.bm-set');
+    if (!!set) {
+        if (set.classList.contains('new-set')) {
+            // TODO New set logic
+        }
+        else {
+            const setName = set.innerText;
+            folderIds = allSets[setName];
+            const promises = [];
+            folderIds.forEach(id => {
+                promises.push(chrome.bookmarks.getChildren(id));
+            })
+            Promise.all(promises).then((values) => {
+                let allNodes = [];
+                values.forEach((v) => {
+                    allNodes = allNodes.concat(v);
+                })
+                const bookmarks = allNodes.filter(n => n.hasOwnProperty('url'));
+                const randomIndex = Math.floor(Math.random() * allNodes.length) + 1;
+                chrome.tabs.create({url: allNodes[randomIndex].url});
+            });
+        }
+        e.stopPropagation();
+    }
+    
+}
+
 function clickFolder(e) {
     const folder = e.target.closest('.bookmark-folder');
-    if (!!folder && !folder.classList.contains('ghosted')) {
+    if (!!folder) {
         setActiveNodebyId(folder.dataset.id);
     }
 }
 
 function clickHeader(e) {
     const btn = e.target.closest('button');
-    console.log("header clicked");
-    console.log("btn: ", btn);
     if (!!btn){
         switch (btn.id) {
             case ('up-btn') :
@@ -105,6 +160,7 @@ function clickHeader(e) {
 }
 
 function assignHandlers() {
-    bookmarkDiv.addEventListener('click', clickFolder);
+    setsList.addEventListener('click', clickSet);
+    // bookmarkTable.addEventListener('click', clickFolder);
     headerElem.addEventListener('click', clickHeader);
 }

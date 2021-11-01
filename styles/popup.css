@@ -1,0 +1,50 @@
+:root {
+    --bg-color: whitesmoke;
+    --item-color: #39a388;
+    --item-selected-color: #1C7947;
+    --header-color: #2C2891;
+}
+
+body {
+    background-color: var(--bg-color);
+    min-width: 400px;
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    color: #cbd9f4;
+    margin-top: -8px;
+    margin-left: -8px;
+    margin-right: -8px;
+    padding: 5px 5px 5px 10px;
+    font-size: 14px;
+    font-weight: bold;
+    background-color: var(--header-color);
+}
+
+header i {
+    margin: 0 2px;
+}
+
+header .hide {
+    display: none;
+}
+
+.bookmark-folder {
+    background-color: var(--item-color);
+    margin: 2px 1px;
+    padding: 2px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.bookmark-folder:hover, .bookmark-folder-selected {
+    background-color:var(--item-selected-color);
+}
+
+.bookmark-folder.ghosted {
+    font-weight: unset;
+    cursor: not-allowed;
+}
