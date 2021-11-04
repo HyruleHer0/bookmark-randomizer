@@ -5,25 +5,29 @@
     </head>
     <body>
         <header>
-            <span>Bookmark Randomizer</span>
-            <!-- <div>
-                <i class="fas fa-arrow-up"></i>
-            </div> -->
+            <div class="app-title">Bookmark Randomizer</div>
+            <div class="status-area">
+                <input class="new-set-name" maxlength="40" type="text" placeholder="New set name" />
+                <span class="status-text">Viewing Saved Sets</span>
+                <div class="header-buttons">
+                    <i class="fas fa-save" title="Save"></i>
+                    <i class="fas fa-window-close" title="Cancel"></i>
+                </div>
+            </div>
         </header>
-        <div id="sets-area">
-            <ul>
-                <li class="bm-set create-new-set">Create New</li>
-            </ul>
+        <div id="app">
+            <div id="sets-area">
+                <div class="set-item create-new-set"><i class="fas fa-plus-circle"></i>Create New</div>
+                <div class="set-item random-all"><i class="fas fa-question-circle"></i>Random-All</div>
+            </div>
+            <div id="bookmarks-area">
+                <div class="navigation-area at-root">
+                    <span>Viewing Root</span>
+                    <i class="fas fa-arrow-up" title="Move Up"></i>
+                </div>
+                <div class="bookmarks-list"></div>
+            </div>
         </div>
-        <!-- <div id="bookmarks">
-            <table>
-                <thead>
-                    <th>Name</th>
-                    <th><i class="fas fa-bookmark"></i></th>
-                </thead>
-                <tbody</tbody>
-            </table>
-        </div> -->
         <script src="popup.js"></script>
     </body>
 </html>

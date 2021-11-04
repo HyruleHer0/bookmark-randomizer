@@ -1,166 +1,437 @@
 /// <reference path="chrome.d.ts" />
 
+function main() {
+    /** Key for chrome's local storage for saved sets */
+    const setsStorageKey = "saved-sets";
+    /** Key for chrome's local storage for logs */
+    const logStorageKey = "logs";
+    /** Max number of logged actions to keep */
+    const maxLogs = 100;
+    /** Max characters allowed as a set name */
+    const maxSetName = 40;
+    /** Names that the user cannot use to name a set */
+    const reservedSetNames = ['Create New', 'Random-All'];
+    /** Dictionary of set name to array bookmark folder ids */
+    var allSets;
+    /** The new set being created, or the existing set being edited. */
+    var currentSet;
+    /** The current chrome bookmarks node being viewed. */
+    var currentNode;
+    /** If the app is busy animating between the sets and bookmark folder panes */
+    var isBusyAnimating = false;
 
-/** Key for chrome's local storage */
-const setsStorageKey = "saved-sets";
-/** Dictionary of set name to array bookmark folder ids */
-var allSets;
-/** Id of the parent folder for the nodes currently being viewed */
-let parentId;
+    // Elements
+    const $setsArea = document.querySelector('#sets-area');
+    const $bookmarksList = document.querySelector('#bookmarks-area .bookmarks-list');
+    const $bookmarkNav = document.querySelector('#bookmarks-area .navigation-area');
+    const $headerElem = document.querySelector('header');
+    const $newSetNameInput = document.querySelector('header .new-set-name');
+    const $createNewElem = $setsArea.querySelector('.create-new-set');
 
-// Elements
-const setsList = document.querySelector('#sets-area ul');
-const bookmarkTable = document.querySelector('#bookmarks > table');
-const headerElem = document.querySelector('header');
-const upBtn = document.getElementById('up-btn');
+    assignHandlers();
 
-assignHandlers();
+    chrome.storage.sync.get(setsStorageKey, buildSetsList);
 
-// let demoSetsTable = {
-//     'demo': ['5', '62', '661']
-// }
-// chrome.storage.sync.set({[setsStorageKey]: demoSetsTable});
+    function buildSetsList(storageRsp) {
+        allSets = storageRsp[setsStorageKey] || {};
 
+        clearSetsList();
+        Object.keys(allSets).forEach(key => {
+            const setElem = buildHTMLForSet(key);
+            $setsArea.insertBefore(setElem, $createNewElem);
+        });
+    }
 
+    function clearSetsList() {
+        while ($setsArea.firstChild !== $createNewElem) {
+            $setsArea.removeChild($setsArea.firstChild);
+        }
+    }
 
-chrome.bookmarks.getTree(result => {
-    console.log(result);
-})
+    function setActiveNode(node) {
+        if (isBusyAnimating){
+            setTimeout(() => setActiveNode(node), 400);
+        }
+        if (!!node.children & !!node.children.length) {
+            currentNode = node;
+            const navElem = document.querySelector("#bookmarks-area > .navigation-area");
+            navElem.classList.toggle('at-root', !node.hasOwnProperty('parentId'));
 
+            const navText = document.querySelector("#bookmarks-area > .navigation-area > span");
+            navText.innerText = `Viewing Folder: ${node.parentId ? node.title : 'Root'}`;
 
+            clearBookmarkFolders();
+            node.children.forEach(child => {
+                if (!child.hasOwnProperty('url')) { // Check that it's a folder
+                    const bookmarkElem = buildHTMLForFolder(child);
+                    $bookmarksList.append(bookmarkElem);
+                }
+            });
+        }
+    }
 
-chrome.storage.sync.get(setsStorageKey, buildSetsTable);
+    function clearBookmarkFolders() {
+        while ($bookmarksList.children.length > 0) {
+            $bookmarksList.removeChild($bookmarksList.firstChild);
+        }
+        // $bookmarksList.textContent = ''; // TODO: check if clearing this another way helps height
+    }
 
-function buildSetsTable(storageRsp) {
-    allSets = storageRsp[setsStorageKey] || {};
-    const createNewElem = setsList.querySelector('.create-new-set');
-
-    // Populate the list
-    Object.keys(allSets).forEach(key => {
-        const li = document.createElement('li');
-        li.textContent = key;
-        li.classList.add('bm-set');
-        setsList.insertBefore(li, createNewElem);
-    });
-}
-
-
-function setActiveBMNode(node) {
-    if (!!node.children & !!node.children.length) {
-        parentId = node.parentId;
-        bookmarkTable.textContent = '';
-
-        // chrome.storage.sync.set({'last-fetched': node.id});
-
-        node.children.forEach(child => {
-            if (!child.hasOwnProperty('url')) { // Check that it's a folder
-                const div = buildHTMLForFolder(child);
-                bookmarkTable.append(div);
+    function setActiveNodebyId(id) {
+        chrome.bookmarks.getSubTree(id, result => {
+            if (!!result && result.length) {
+                setActiveNode(result[0]);
             }
         });
     }
 
-    console.log(parentId);
-    upBtn.classList.toggle('hide', !parentId && parentId !== 0);
-}
+    function buildHTMLForSet(setName) {
+            const setElem = document.createElement('div');
+            setElem.classList.add('set-item');
+            setElem.dataset.setName = setName;
 
-function setActiveNodebyId(id) {
-    chrome.bookmarks.getSubTree(id, result => {
-        if (!!result && result.length) {
-            setActiveBMNode(result[0]);
-        }
-    });
-}
+            const setNameElem = document.createElement('span');
+            setNameElem.innerText = setName;
 
-function buildHTMLForFolder(node) {
-    const div = document.createElement('div');
-    div.title = node.title;
-    div.classList.add('bookmark-folder');
-    div.dataset.id = node.id;
+            const editBtn = document.createElement('i');
+            editBtn.classList.add('fas', 'fa-wrench');
+            editBtn.title = 'Edit';
 
-    if (isEndOfPath(node)) {
-        div.classList.add('ghosted');
+            const delBtn = document.createElement('i');
+            delBtn.classList.add('fas', 'fa-trash-alt');
+            delBtn.title = 'Delete';
+
+            const btnContainer = document.createElement('span');
+            btnContainer.classList.add('buttons');
+
+            btnContainer.append(editBtn, delBtn);
+            setElem.append(setNameElem, btnContainer);
+            return setElem;
     }
 
-    let bmCount = 0, folderCount = 0;
-    node.children.forEach(grandchild => {
-        if (grandchild.hasOwnProperty('url')) {
-            bmCount++;
+    function buildHTMLForFolder(node) {
+        // Count the number of bookmark and folder children for the node
+        let bmCount = 0, folderCount = 0;
+        node.children.forEach(grandchild => {
+            if (grandchild.hasOwnProperty('url')) {
+                bmCount++;
+            }
+            else {
+                folderCount++;
+            }
+        });
+
+        const folderElem = document.createElement('div');
+        folderElem.dataset.id = node.id;
+        folderElem.dataset.folders = folderCount;
+        folderElem.classList.add('bookmark-folder');
+
+        if (currentSet.ids.indexOf(node.id) > -1) {
+            folderElem.classList.add('selected');
+        }
+
+        const folderNameElem = document.createElement('span');
+        folderNameElem.innerText = node.title;
+
+        const btnContainer = document.createElement('span');
+        btnContainer.classList.add('buttons');
+
+        const childInfoElem = document.createElement('div');
+        childInfoElem.classList.add('child-info');
+        childInfoElem.title = `${folderCount} Folders / ${bmCount} Bookmarks`;
+
+        const folderCountElem = document.createElement('div');
+        folderCountElem.innerHTML = `<div>${folderCount} <i class="fas fa-folder"></i></div>`;
+
+        const bmCountElem = document.createElement('div');
+        bmCountElem.innerHTML = `<div>${bmCount} <i class="fas fa-bookmark"></i></div>`;
+
+        childInfoElem.append(folderCountElem, bmCountElem);
+        btnContainer.append(childInfoElem);
+
+        const stepDownElem = document.createElement('i');
+        stepDownElem.classList.add('fas', 'fa-level-down-alt');
+        stepDownElem.title = "View subfolders";
+        btnContainer.appendChild(stepDownElem);
+
+        if (folderCount === 0) {
+            stepDownElem.classList.add('disabled');
+        }
+
+        folderElem.append(folderNameElem, btnContainer);
+        return folderElem;
+    }
+
+    function openSetEditor(setName) {
+        // A setname provided means that this is an edit. If omitted, this is a new set
+        if (!!setName) {
+            currentSet = {name: setName, ids: allSets[setName]};
+            setHeaderStatus(true, setName);
         }
         else {
-            folderCount++;
+            currentSet = {name: '', ids: []};
+            setHeaderStatus(true, '');
         }
-    });
 
-    const title = document.createElement('span');
-    title.textContent = node.title;
-    title.classList.add('title');
+        chrome.bookmarks.getTree(result => {
+            setActiveNode(result[0]);
+            animateTransition(true);
+        });
+    }
 
-    const childCount = document.createElement('span');
-    childCount.textContent = `${folderCount} / ${bmCount}`;
-    childCount.classList.add('child-count');
+    function closeSetEditor() {
+        setHeaderStatus(false, '');
 
-    div.appendChild(title);
-    div.appendChild(childCount);
+        currentSet = undefined;
+        $newSetNameInput.value = '';
 
-    return div;
-}
+        chrome.storage.sync.get(setsStorageKey, (response) => {
+            buildSetsList(response);
+            animateTransition(false);
+        });
+    }
 
-function isEndOfPath(node) {
-    return !node.children || node.children.length === 0 || node.children.every(n => {
-        n.hasOwnProperty('url')
-    });
-}
+    function animateTransition(isOpening) {
+        isBusyAnimating = true;
 
-function clickSet(e) {
-    const set = e.target.closest('.bm-set');
-    if (!!set) {
-        if (set.classList.contains('new-set')) {
-            // TODO New set logic
+        if (isOpening) {
+            $setsArea.classList.add('hide');
+            setTimeout(() => {
+                clearSetsList();
+                isBusyAnimating = false;
+            }, 400);
         }
         else {
-            const setName = set.innerText;
-            folderIds = allSets[setName];
-            const promises = [];
-            folderIds.forEach(id => {
-                promises.push(chrome.bookmarks.getChildren(id));
-            })
-            Promise.all(promises).then((values) => {
-                let allNodes = [];
-                values.forEach((v) => {
-                    allNodes = allNodes.concat(v);
-                })
-                const bookmarks = allNodes.filter(n => n.hasOwnProperty('url'));
-                const randomIndex = Math.floor(Math.random() * allNodes.length) + 1;
-                chrome.tabs.create({url: allNodes[randomIndex].url});
+            $setsArea.classList.remove('hide');
+            setTimeout(() => {
+                clearBookmarkFolders();
+                isBusyAnimating = false;
+            }, 400 );
+        }
+    }
+
+    function setHeaderStatus(isEditingOrCreating, setName) {
+        const statusArea = document.querySelector("header .status-area");
+
+        if (isEditingOrCreating) {
+            statusArea.classList.toggle('no-folders', currentSet.ids.length === 0);
+
+            if (!!setName) {
+                statusArea.classList.add('is-editing');
+                const statusTextElem = document.querySelector("header .status-text");
+                statusTextElem.innerText = 'Editing ';
+                const setNameElem = document.createElement("span");
+                setNameElem.classList.add('emphasis');
+                setNameElem.innerText = setName;
+                statusTextElem.appendChild(setNameElem);
+            }
+            else {
+                statusArea.classList.add('is-creating');
+            }
+        }
+        else {
+            statusArea.classList.remove('is-creating', 'is-editing');
+            document.querySelector("header .status-text").textContent = 'Viewing Saved Sets';
+        }    
+    }
+
+    function deleteSet(setName) {
+        delete allSets[setName];
+        chrome.storage.sync.set({[setsStorageKey]: allSets}, () => {
+            chrome.storage.sync.get(setsStorageKey, buildSetsList);
+        });
+    }
+
+    function clickSet(e) {
+        const set = e.target.closest('.set-item');
+        const btn = e.target.closest('i');
+        if (!set) {
+            return;
+        }
+        if (!!btn) {
+            switch (btn.title) {
+                case 'Edit':
+                    openSetEditor(set.dataset.setName);
+                    break;
+                case 'Delete':
+                    deleteSet(set.dataset.setName);
+                    break;
+            }
+        }
+        else {
+            if (set.classList.contains('create-new-set')) {
+                openSetEditor('');
+            }
+            else if (set.classList.contains('random-all')) {
+                goToRandomFromAllBookmarks();
+            }
+            else {
+                goToRandomURLFromSet(set.innerText);
+            }
+        }
+    }
+
+    function clickFolder(e) {
+        const folder = e.target.closest('.bookmark-folder');
+        const subFolderBtn = e.target.closest('i.fa-level-down-alt');
+        if (!folder) {
+            return;
+        }
+        if (!!subFolderBtn) {
+            if (parseInt(folder.dataset.folders) > 0) {
+                setActiveNodebyId(folder.dataset.id);
+            }
+        }
+        else {    
+            const index = currentSet.ids.indexOf(e.target.dataset.id);
+
+            if (index > -1) {
+                currentSet.ids.splice(index, 1);
+                const statusArea = document.querySelector("header .status-area");
+                statusArea.classList.toggle('no-folders', currentSet.ids.length === 0);
+            }
+            else {
+                currentSet.ids.push(folder.dataset.id);
+            }
+
+            folder.classList.toggle('selected', index === -1);
+        }
+        
+    }
+
+    function validateInput(value) {
+        return !!value && value.length < maxSetName && value in allSets === false && reservedSetNames.indexOf(value) === -1;
+    }
+
+    function clickHeader(e) {
+        const btn = e.target.closest('i');
+        if (!!btn) {
+            if (btn.classList.contains('fa-save')) {
+                if (!currentSet.name) {
+                    const inputValue = document.querySelector('header .new-set-name').value;
+                    
+                    if (!validateInput(inputValue) || currentSet.ids.length === 0) {
+                        return;
+                    }
+
+                    currentSet.name = inputValue;
+                }
+
+                allSets[currentSet.name] = currentSet.ids;
+                chrome.storage.sync.set({[setsStorageKey]: allSets}, () => {
+                    closeSetEditor();
+                });
+            }
+            else if (btn.classList.contains('fa-window-close')) {
+                closeSetEditor();
+            }
+        }
+    }
+
+    function clickNavArea(e) {
+        const btn = e.target.closest('.fa-arrow-up');
+        if (!!btn) {
+            setActiveNodebyId(currentNode.parentId);
+        }
+    }
+
+    function assignHandlers() {
+        $setsArea.addEventListener('click', clickSet);
+        $bookmarksList.addEventListener('click', clickFolder);
+        $bookmarkNav.addEventListener('click', clickNavArea);
+        $headerElem.addEventListener('click', clickHeader);
+        $newSetNameInput.addEventListener('input', onInputChanged);
+    }
+
+    function logAction(msg) {
+        chrome.storage.sync.get(logStorageKey, (result) => {
+            const logs = result[logStorageKey] || [];
+            const newLog = {timeStamp: Date.now(), msg};
+
+            // If we have room, insert a new log
+            if (logs.length <= maxLogs) {
+                logs.push(newLog);
+            }
+            else {
+                // Otherwise, find the first instance of a log at a higher index with a timestamp older
+                // Than the previous index, and replace it. This should result in a circular queue.
+                let insertIndex = 0;
+                for (i = 0; i < logs.length - 1; i++) {
+                    if (logs[i].timeStamp > logs[i + 1].timeStamp) {
+                        insertIndex = i + 1;
+                        break;
+                    }
+                }
+                logs.splice(insertIndex, 1, newLog);
+            }
+
+            chrome.storage.sync.set({[logStorageKey]: logs});
+        });
+    }
+
+    function onInputChanged(e) {
+        e.target.parentElement.classList.toggle('invalid-input', !validateInput(e.target.value));
+    }
+
+    function goToRandomURLFromSet(setName) {
+        folderIds = allSets[setName];
+        const promises = [];
+
+        folderIds.forEach(id => {
+            try {
+                const promise = chrome.bookmarks.getChildren(id);
+                promises.push(promise);
+            }
+            catch (err) {
+                console.error(error);
+            }
+        });
+
+        Promise.all(promises).then((values) => {
+            let allNodes = [];
+            values.forEach((v) => {
+                allNodes = allNodes.concat(v);
             });
-        }
-        e.stopPropagation();
-    }
-    
-}
 
-function clickFolder(e) {
-    const folder = e.target.closest('.bookmark-folder');
-    if (!!folder) {
-        setActiveNodebyId(folder.dataset.id);
+            const bookmarks = allNodes.filter(n => n.hasOwnProperty('url'));
+            const randomIndex = Math.floor(Math.random() * bookmarks.length) + 1;
+            const randomURL = bookmarks[randomIndex].url;
+
+            logAction(`Attempting to navigate to the random URL: ${randomURL}`);
+            chrome.tabs.create({url: randomURL});
+        });
+    }
+
+    function goToRandomFromAllBookmarks() {
+        let allBookMarks = [];
+        let folderStack = [];
+        chrome.bookmarks.getTree(result => {
+            let node = result[0];
+            separateFoldersAndBookmarks(node, allBookMarks, folderStack);
+
+            while (folderStack.length > 0) {
+                node = folderStack.pop();
+                separateFoldersAndBookmarks(node, allBookMarks, folderStack);
+            }
+
+            const randomIndex = Math.floor(Math.random() * allBookMarks.length) + 1;
+            const randomURL = allBookMarks[randomIndex].url;
+
+            logAction(`Attempting to navigate to the random URL: ${randomURL}`);
+            chrome.tabs.create({url: randomURL});
+
+        });
+    }
+
+    function separateFoldersAndBookmarks(node, bookmarks, folders) {
+        node.children.forEach(c => {
+            if (c.hasOwnProperty('url')) {
+                bookmarks.push(c);
+            }
+            else {
+                folders.push(c);
+            }
+        });
     }
 }
-
-function clickHeader(e) {
-    const btn = e.target.closest('button');
-    if (!!btn){
-        switch (btn.id) {
-            case ('up-btn') :
-                console.log("up clicked")
-                setActiveNodebyId(parentId);
-                break;
-        }
-    }
-}
-
-function assignHandlers() {
-    setsList.addEventListener('click', clickSet);
-    // bookmarkTable.addEventListener('click', clickFolder);
-    headerElem.addEventListener('click', clickHeader);
-}
+main();

@@ -7,44 +7,251 @@
 
 body {
     background-color: var(--bg-color);
-    min-width: 400px;
+    width: 400px;
+    min-height: 100px;
 }
 
+.fas, .fa {
+    cursor: pointer;
+}
+
+
 header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     color: #cbd9f4;
     margin-top: -8px;
     margin-left: -8px;
     margin-right: -8px;
     padding: 5px 5px 5px 10px;
-    font-size: 14px;
+    height: 38px;
+    font-size: 16px;
     font-weight: bold;
     background-color: var(--header-color);
 }
 
-header i {
-    margin: 0 2px;
+header .status-area {
+    font-size: 12px;
+    font-weight: unset;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    align-items: center;
 }
 
-header .hide {
+header .status-area .status-text {
+    padding-left: 1px;
+    color: white;
+}
+
+header .status-area .header-buttons {
+    flex-shrink: 0;
+    font-size: 16px;
+}
+
+.status-area.invalid-input .new-set-name {
+    border: 1px solid red;
+}
+
+.status-area.invalid-input .fa-save, .status-area.no-folders .fa-save {
+    cursor: not-allowed;
+}
+
+header .fa-save {
+    color: limegreen;
+}
+
+header .fa-save:hover {
+    color: rgb(91, 215, 91);
+}
+
+header .fa-window-close {
+    color: crimson;
+}
+
+header .fa-window-close:hover {
+    color: rgb(237, 57, 93);
+}
+
+header .status-area .emphasis {
+    color:darkgoldenrod;
+}
+
+.new-set-name, .emphasis, header .header-buttons {
+    display: none;
+}
+
+.status-area.is-creating .status-text {
+    display: none;
+}
+
+.status-area.is-creating .new-set-name {
+    display: unset;
+    outline: none;
+}
+
+.status-area.is-editing .emphasis {
+    display: unset;
+}
+
+.status-area.is-creating .header-buttons, .status-area.is-editing .header-buttons {
+    display: unset;
+}
+
+#app {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow: hidden;
+}
+
+#sets-area {
+    transition: width .4s;
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: 240px;
+    flex-shrink: 0;
+    flex-grow: 0;
+    width: 100%;
+}
+
+#sets-area.hide {
+    width: 0;
+}
+
+.set-item {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0 8px 6px;
+    margin: 2px 0;
+    font-weight: bold;
+    flex-wrap: nowrap;
+    user-select: none;
+}
+
+.set-item:hover {
+    background-color: lightblue;
+    opacity: 85%;
+}
+
+.set-item > span {
+    text-overflow: ellipsis;
+    white-space: break-spaces;
+    overflow: hidden;
+}
+
+.set-item .buttons {
+    font-size: 14px;
+    flex-grow: 0;
+    flex-shrink: 0;
+}
+
+.set-item i {
+    vertical-align: middle;
+    margin: 0 8px;
+}
+
+.set-item .fa-wrench {
+    color: gray;
+}
+
+.set-item .fa-wrench:hover {
+    color: lightgray;
+}
+
+.set-item .fa-trash-alt {
+    color: crimson;
+}
+
+.set-item .fa-trash-alt:hover {
+    color: rgb(237, 57, 93);
+}
+
+.set-item.create-new-set, .set-item.random-all {
+    justify-content: flex-start;
+}
+
+.set-item .fa-plus-circle, .set-item .fa-question-circle {
+    margin-left: 0;
+    margin-top: 1px;
+}
+
+#bookmarks-area {
+    overflow-x: hidden;
+    overflow-y: auto;
+    max-height: 240px;
+    flex-grow: 0;
+    flex-shrink: 0;
+    width: 100%;
+}
+
+#bookmarks-area .navigation-area {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid black;
+    padding: 2px 0;
+}
+
+.navigation-area.at-root .fa-arrow-up {
     display: none;
 }
 
 .bookmark-folder {
-    background-color: var(--item-color);
-    margin: 2px 1px;
-    padding: 2px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0 8px 6px;
+    margin: 2px 0;
     font-weight: bold;
-    cursor: pointer;
+    flex-wrap: nowrap;
+    align-items: center;
+    user-select: none;
 }
 
-.bookmark-folder:hover, .bookmark-folder-selected {
-    background-color:var(--item-selected-color);
+.bookmark-folder > span:first-child {
+    text-overflow: ellipsis;
+    white-space: break-spaces;
+    overflow: hidden;
 }
 
-.bookmark-folder.ghosted {
-    font-weight: unset;
+.bookmark-folder.selected {
+    background-color: lightblue;
+}
+
+.bookmark-folder .buttons {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+}
+
+.bookmark-folder .buttons > * {
+    margin: 0 8px;
+}
+
+.bookmark-folder .child-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.bookmark-folder .fa-level-down-alt {
+    font-size: 14px;
+}
+
+.bookmark-folder .fa-level-down-alt:hover {
+    color: darkgray;
+}
+
+.fa-level-down-alt.disabled {
     cursor: not-allowed;
+    color: initial !important;
+}
+
+.bookmark-folder:hover {
+    background-color: lightblue;
+    opacity: 85%;
 }
