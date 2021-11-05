@@ -13,25 +13,25 @@ function main() {
     const reservedSetNames = ['Create New', 'Random-All'];
     /** Dictionary of set name to array bookmark folder ids */
     var allSets;
-    /** The new set being created, or the existing set being edited. */
+    /** { name: string, ids: string[] } - The new set being created, or the existing set being edited. */
     var currentSet;
     /** The current chrome bookmarks node being viewed. */
     var currentNode;
-    /** If the app is busy animating between the sets and bookmark folder panes */
-    var isBusyAnimating = false;
 
     // Elements
     const $setsArea = document.querySelector('#sets-area');
+    const $createNewElem = $setsArea.querySelector('.create-new-set');
     const $bookmarksList = document.querySelector('#bookmarks-area .bookmarks-list');
     const $bookmarkNav = document.querySelector('#bookmarks-area .navigation-area');
+    const $selectedFolders = $bookmarkNav.querySelector('.folder-count');
     const $headerElem = document.querySelector('header');
-    const $newSetNameInput = document.querySelector('header .new-set-name');
-    const $createNewElem = $setsArea.querySelector('.create-new-set');
+    const $newSetNameInput = $headerElem.querySelector('.new-set-name');
+    const $saveSetBtn = $headerElem.querySelector('i.fa-save');
 
     assignHandlers();
-
     chrome.storage.sync.get(setsStorageKey, buildSetsList);
 
+    /** Populates the list of sets on the page given the response from chrome.storage */
     function buildSetsList(storageRsp) {
         allSets = storageRsp[setsStorageKey] || {};
 
@@ -42,27 +42,25 @@ function main() {
         });
     }
 
+    /** Empty the list of sets on the page */
     function clearSetsList() {
         while ($setsArea.firstChild !== $createNewElem) {
             $setsArea.removeChild($setsArea.firstChild);
         }
     }
 
-    function setActiveNode(node) {
-        if (isBusyAnimating){
-            setTimeout(() => setActiveNode(node), 400);
-        }
+    /** Sets the new active folder and displays its subfolders */
+    function setActiveFolder(node) {
         if (!!node.children & !!node.children.length) {
             currentNode = node;
-            const navElem = document.querySelector("#bookmarks-area > .navigation-area");
-            navElem.classList.toggle('at-root', !node.hasOwnProperty('parentId'));
-
-            const navText = document.querySelector("#bookmarks-area > .navigation-area > span");
-            navText.innerText = `Viewing Folder: ${node.parentId ? node.title : 'Root'}`;
+            
+            $bookmarkNav.classList.toggle('at-root', !node.hasOwnProperty('parentId'));
+            const currentFolderElem = $bookmarkNav.querySelector(".current-folder");
+            currentFolderElem.innerText = `Viewing Folder: ${node.parentId ? node.title : 'Root'}`;
 
             clearBookmarkFolders();
             node.children.forEach(child => {
-                if (!child.hasOwnProperty('url')) { // Check that it's a folder
+                if (isAFolder(child)) {
                     const bookmarkElem = buildHTMLForFolder(child);
                     $bookmarksList.append(bookmarkElem);
                 }
@@ -70,21 +68,23 @@ function main() {
         }
     }
 
+    /** Empties the list of folders on the page */
     function clearBookmarkFolders() {
         while ($bookmarksList.children.length > 0) {
             $bookmarksList.removeChild($bookmarksList.firstChild);
         }
-        // $bookmarksList.textContent = ''; // TODO: check if clearing this another way helps height
     }
 
-    function setActiveNodebyId(id) {
+    /** Sets the active folder given its id and displays its subfolders */
+    function setActiveFolderById(id) {
         chrome.bookmarks.getSubTree(id, result => {
             if (!!result && result.length) {
-                setActiveNode(result[0]);
+                setActiveFolder(result[0]);
             }
         });
     }
 
+    /** Builds the HTML for a set in the list */
     function buildHTMLForSet(setName) {
             const setElem = document.createElement('div');
             setElem.classList.add('set-item');
@@ -109,11 +109,12 @@ function main() {
             return setElem;
     }
 
+    /** Builds the HTML for a folder in the list */
     function buildHTMLForFolder(node) {
         // Count the number of bookmark and folder children for the node
         let bmCount = 0, folderCount = 0;
         node.children.forEach(grandchild => {
-            if (grandchild.hasOwnProperty('url')) {
+            if (!isAFolder(grandchild)) {
                 bmCount++;
             }
             else {
@@ -162,8 +163,10 @@ function main() {
         return folderElem;
     }
 
+    /** Opens the set editor to create or edit the folders within a set
+     * @param setName The name of the set to edit. If omitted, this is a new set
+     */
     function openSetEditor(setName) {
-        // A setname provided means that this is an edit. If omitted, this is a new set
         if (!!setName) {
             currentSet = {name: setName, ids: allSets[setName]};
             setHeaderStatus(true, setName);
@@ -173,12 +176,15 @@ function main() {
             setHeaderStatus(true, '');
         }
 
+        displayFolderCount();
+
         chrome.bookmarks.getTree(result => {
-            setActiveNode(result[0]);
-            animateTransition(true);
+            setActiveFolder(result[0]);
+            $setsArea.classList.add('hide');
         });
     }
 
+    /** Close the set editor and return to the list of sets */
     function closeSetEditor() {
         setHeaderStatus(false, '');
 
@@ -187,38 +193,21 @@ function main() {
 
         chrome.storage.sync.get(setsStorageKey, (response) => {
             buildSetsList(response);
-            animateTransition(false);
+            $setsArea.classList.remove('hide');
         });
     }
 
-    function animateTransition(isOpening) {
-        isBusyAnimating = true;
-
-        if (isOpening) {
-            $setsArea.classList.add('hide');
-            setTimeout(() => {
-                clearSetsList();
-                isBusyAnimating = false;
-            }, 400);
-        }
-        else {
-            $setsArea.classList.remove('hide');
-            setTimeout(() => {
-                clearBookmarkFolders();
-                isBusyAnimating = false;
-            }, 400 );
-        }
-    }
-
+    /** Modify the header as needed for the current state of the app.
+     * @param isEditingOrCreating If the set editor pane being opened, else it is being closed
+     * @param setName The name of the set to edit. If omitted, this is a new set
+    */
     function setHeaderStatus(isEditingOrCreating, setName) {
-        const statusArea = document.querySelector("header .status-area");
+        const statusArea = $headerElem.querySelector(".status-area");
 
         if (isEditingOrCreating) {
-            statusArea.classList.toggle('no-folders', currentSet.ids.length === 0);
-
             if (!!setName) {
                 statusArea.classList.add('is-editing');
-                const statusTextElem = document.querySelector("header .status-text");
+                const statusTextElem = $headerElem.querySelector(".status-text");
                 statusTextElem.innerText = 'Editing ';
                 const setNameElem = document.createElement("span");
                 setNameElem.classList.add('emphasis');
@@ -227,14 +216,26 @@ function main() {
             }
             else {
                 statusArea.classList.add('is-creating');
+                $newSetNameInput.classList.add('invalid-input');
             }
+
+            giveSaveBtnFeedback();
         }
         else {
             statusArea.classList.remove('is-creating', 'is-editing');
-            document.querySelector("header .status-text").textContent = 'Viewing Saved Sets';
+            $headerElem.querySelector(".status-text").textContent = 'Viewing Saved Sets';
         }    
     }
 
+    /** Modify the display of selected folder count */
+    function displayFolderCount() {
+        $selectedFolders.innerText = `${currentSet.ids.length} Folders Selected`;
+        $selectedFolders.classList.toggle('none-selected', currentSet.ids.length === 0);
+    }
+
+    /** Delete a set from the list and from chrome.storage
+     * @param setName The name of the set
+     */
     function deleteSet(setName) {
         delete allSets[setName];
         chrome.storage.sync.set({[setsStorageKey]: allSets}, () => {
@@ -242,12 +243,15 @@ function main() {
         });
     }
 
+    /** Delegated event handler for clicking on a set in the list */
     function clickSet(e) {
         const set = e.target.closest('.set-item');
         const btn = e.target.closest('i');
+
         if (!set) {
             return;
         }
+
         if (!!btn) {
             switch (btn.title) {
                 case 'Edit':
@@ -271,56 +275,56 @@ function main() {
         }
     }
 
+    /** Delegated event handler for clicking a folder in the list */
     function clickFolder(e) {
         const folder = e.target.closest('.bookmark-folder');
         const subFolderBtn = e.target.closest('i.fa-level-down-alt');
+
         if (!folder) {
             return;
         }
+
         if (!!subFolderBtn) {
             if (parseInt(folder.dataset.folders) > 0) {
-                setActiveNodebyId(folder.dataset.id);
+                setActiveFolderById(folder.dataset.id);
             }
         }
         else {    
-            const index = currentSet.ids.indexOf(e.target.dataset.id);
-
-            if (index > -1) {
-                currentSet.ids.splice(index, 1);
-                const statusArea = document.querySelector("header .status-area");
-                statusArea.classList.toggle('no-folders', currentSet.ids.length === 0);
-            }
-            else {
-                currentSet.ids.push(folder.dataset.id);
-            }
-
-            folder.classList.toggle('selected', index === -1);
+            toggleFolderSelection(folder);
         }
-        
     }
 
-    function validateInput(value) {
+    /** Select or deselect a folder from the list
+     * @param folderElement The HTML element of the folder that was clicked on
+     */
+    function toggleFolderSelection(folderElement) {
+        const index = currentSet.ids.indexOf(folderElement.dataset.id);
+
+        if (index > -1) {
+            currentSet.ids.splice(index, 1);
+        }
+        else {
+            currentSet.ids.push(folderElement.dataset.id);
+        }
+
+        displayFolderCount();
+        giveSaveBtnFeedback();
+        folderElement.classList.toggle('selected', index === -1);
+    }
+
+    /** Validate that the set name is not too long and does not already exist
+     * @param value The set name
+     */
+    function validateSetNameInput(value) {
         return !!value && value.length < maxSetName && value in allSets === false && reservedSetNames.indexOf(value) === -1;
     }
 
+    /** Delegated event handler for clicking the header */
     function clickHeader(e) {
         const btn = e.target.closest('i');
         if (!!btn) {
-            if (btn.classList.contains('fa-save')) {
-                if (!currentSet.name) {
-                    const inputValue = document.querySelector('header .new-set-name').value;
-                    
-                    if (!validateInput(inputValue) || currentSet.ids.length === 0) {
-                        return;
-                    }
-
-                    currentSet.name = inputValue;
-                }
-
-                allSets[currentSet.name] = currentSet.ids;
-                chrome.storage.sync.set({[setsStorageKey]: allSets}, () => {
-                    closeSetEditor();
-                });
+            if (btn.classList.contains('fa-save') && currentSet.ids.length > 0) {
+                saveCurrentSet();
             }
             else if (btn.classList.contains('fa-window-close')) {
                 closeSetEditor();
@@ -328,13 +332,33 @@ function main() {
         }
     }
 
+    /** Save the new set or save the changes to the set being edited */
+    function saveCurrentSet() {
+        if (!currentSet.name) {
+            const inputValue = $headerElem.querySelector('.new-set-name').value;
+            
+            if (!validateSetNameInput(inputValue) || currentSet.ids.length === 0) {
+                return;
+            }
+
+            currentSet.name = inputValue;
+        }
+
+        allSets[currentSet.name] = currentSet.ids;
+        chrome.storage.sync.set({[setsStorageKey]: allSets}, () => {
+            closeSetEditor();
+        });
+    }
+
+    /** Delegated event handler for clicking the bookmark navigation area */
     function clickNavArea(e) {
-        const btn = e.target.closest('.fa-arrow-up');
+        const btn = e.target.closest('.fa-level-up-alt');
         if (!!btn) {
-            setActiveNodebyId(currentNode.parentId);
+            setActiveFolderById(currentNode.parentId);
         }
     }
 
+    /** Assign handlers to select elements */
     function assignHandlers() {
         $setsArea.addEventListener('click', clickSet);
         $bookmarksList.addEventListener('click', clickFolder);
@@ -343,95 +367,96 @@ function main() {
         $newSetNameInput.addEventListener('input', onInputChanged);
     }
 
-    function logAction(msg) {
-        chrome.storage.sync.get(logStorageKey, (result) => {
-            const logs = result[logStorageKey] || [];
-            const newLog = {timeStamp: Date.now(), msg};
-
-            // If we have room, insert a new log
-            if (logs.length <= maxLogs) {
-                logs.push(newLog);
-            }
-            else {
-                // Otherwise, find the first instance of a log at a higher index with a timestamp older
-                // Than the previous index, and replace it. This should result in a circular queue.
-                let insertIndex = 0;
-                for (i = 0; i < logs.length - 1; i++) {
-                    if (logs[i].timeStamp > logs[i + 1].timeStamp) {
-                        insertIndex = i + 1;
-                        break;
-                    }
-                }
-                logs.splice(insertIndex, 1, newLog);
-            }
-
-            chrome.storage.sync.set({[logStorageKey]: logs});
-        });
-    }
-
+    /** Event handler for the set name input */
     function onInputChanged(e) {
-        e.target.parentElement.classList.toggle('invalid-input', !validateInput(e.target.value));
+        e.target.classList.toggle('invalid-input', !validateSetNameInput(e.target.value));
+        giveSaveBtnFeedback();
     }
 
+    /** Change the hover functionality for the save button depending on if the current settings are valid */
+    function giveSaveBtnFeedback() {
+        if ($newSetNameInput.classList.contains('invalid-input')) {
+            $saveSetBtn.classList.add('invalid');
+            $saveSetBtn.title = 'Invalid Set Name';
+        }
+        else if (currentSet.ids.length === 0) {
+            $saveSetBtn.classList.add('invalid');
+            $saveSetBtn.title = 'No folders selected';
+        }
+        else {
+            $saveSetBtn.classList.remove('invalid');
+            $saveSetBtn.title = 'Save';
+        }
+    }
+
+    /** Select and navigate to a random bookmark from within the set
+     * @param setName The name of the set
+     */
     function goToRandomURLFromSet(setName) {
         folderIds = allSets[setName];
         const promises = [];
+        let allNodes = [];
 
         folderIds.forEach(id => {
-            try {
-                const promise = chrome.bookmarks.getChildren(id);
-                promises.push(promise);
-            }
-            catch (err) {
-                console.error(error);
-            }
+            const promise = chrome.bookmarks.getChildren(id);
+            promise
+            .then((n) => allNodes = allNodes.concat(n))
+            .catch(err => console.error(err)); // An invalid id throws an error that must be caught here
+            promises.push(promise);
         });
 
-        Promise.all(promises).then((values) => {
-            let allNodes = [];
-            values.forEach((v) => {
-                allNodes = allNodes.concat(v);
-            });
-
-            const bookmarks = allNodes.filter(n => n.hasOwnProperty('url'));
-            const randomIndex = Math.floor(Math.random() * bookmarks.length) + 1;
-            const randomURL = bookmarks[randomIndex].url;
-
-            logAction(`Attempting to navigate to the random URL: ${randomURL}`);
-            chrome.tabs.create({url: randomURL});
+        Promise.all(promises).finally(() => {
+            const bookmarks = allNodes.filter(n => !isAFolder(n));
+            if (bookmarks.length > 0) {
+                const randomIndex = Math.floor(Math.random() * bookmarks.length);
+                const randomURL = bookmarks[randomIndex].url;
+                chrome.tabs.create({url: randomURL});
+            }
         });
     }
 
+    /** Select and navigate to a random bookmark from within all of the user's bookmarks */
     function goToRandomFromAllBookmarks() {
-        let allBookMarks = [];
+        let bookmarks = [];
         let folderStack = [];
         chrome.bookmarks.getTree(result => {
             let node = result[0];
-            separateFoldersAndBookmarks(node, allBookMarks, folderStack);
 
+            separateFoldersAndBookmarks(node, bookmarks, folderStack);
             while (folderStack.length > 0) {
                 node = folderStack.pop();
-                separateFoldersAndBookmarks(node, allBookMarks, folderStack);
+                separateFoldersAndBookmarks(node, bookmarks, folderStack);
             }
 
-            const randomIndex = Math.floor(Math.random() * allBookMarks.length) + 1;
-            const randomURL = allBookMarks[randomIndex].url;
-
-            logAction(`Attempting to navigate to the random URL: ${randomURL}`);
-            chrome.tabs.create({url: randomURL});
-
+            if (bookmarks.length > 0) {
+                const randomIndex = Math.floor(Math.random() * bookmarks.length);
+                const randomURL = bookmarks[randomIndex].url;
+                chrome.tabs.create({url: randomURL});
+            }
         });
     }
 
+    /** Given a node and two arrays, splits the bookmarks into one array, and the folders into the other.
+     * @param node The chrome.bookmarks node
+     * @param bookmarks The array to put the bookmarks into
+     * @param folders The array to put the folders into
+    */
     function separateFoldersAndBookmarks(node, bookmarks, folders) {
         node.children.forEach(c => {
-            if (c.hasOwnProperty('url')) {
-                bookmarks.push(c);
-            }
-            else {
+            if (isAFolder(c)) {
                 folders.push(c);
             }
+            else {
+                bookmarks.push(c);
+            }
         });
+    }
+
+    /** Checks if a chrome.bookmarks node is a folder. Otherwise, it is a bookmark
+     * @param node The chrome.bookmarks node to check
+     */
+    function isAFolder(node) {
+        return !node.hasOwnProperty('url');
     }
 }
 main();

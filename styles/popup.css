@@ -48,16 +48,16 @@ header .status-area .header-buttons {
     font-size: 16px;
 }
 
-.status-area.invalid-input .new-set-name {
+.status-area .new-set-name.invalid-input {
     border: 1px solid red;
-}
-
-.status-area.invalid-input .fa-save, .status-area.no-folders .fa-save {
-    cursor: not-allowed;
 }
 
 header .fa-save {
     color: limegreen;
+}
+
+header .fa-save.invalid {
+    cursor: not-allowed;
 }
 
 header .fa-save:hover {
@@ -192,11 +192,28 @@ header .status-area .emphasis {
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid black;
-    padding: 2px 0;
+    padding: 2px 8px 2px 0;
 }
 
-.navigation-area.at-root .fa-arrow-up {
+.navigation-area.at-root .fa-level-up-alt {
     display: none;
+}
+
+.navigation-area .fa-level-up-alt {
+    font-size: 14px;
+}
+
+.navigation-area .fa-level-up-alt:hover {
+    color: darkgray;
+}
+
+.navigation-area .folder-count {
+    color: royalblue;
+    font-weight: bold;
+}
+
+.navigation-area .folder-count.none-selected {
+    color: red;
 }
 
 .bookmark-folder {
